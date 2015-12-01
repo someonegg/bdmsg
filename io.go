@@ -22,15 +22,15 @@ var (
 // Message is a variable-length byte array.
 type Msg []byte
 
-// Message is identified by id.
-type MsgId int32
+// Message is distinguished by type.
+type MsgType int32
 
 type MsgReader interface {
-	ReadMsg() (id MsgId, m Msg, err error)
+	ReadMsg() (t MsgType, m Msg, err error)
 }
 
 type MsgWriter interface {
-	WriteMsg(id MsgId, m Msg) (err error)
+	WriteMsg(t MsgType, m Msg) (err error)
 }
 
 type MsgReadWriter interface {
@@ -41,7 +41,7 @@ type MsgReadWriter interface {
 /*
 In the transport layer, message's layout is:
 
-	A(length) + B(id) + C(data)
+	A(length) + B(type) + C(data)
 	A is 4-bytes int, big-endian
 	B is 4-bytes int, big-endian
 	C is byte array, its length is (A) - 4
@@ -55,7 +55,7 @@ func NewMsgRWIO(rw io.ReadWriter, msgMax int) *MsgRWIO {
 	return &MsgRWIO{RW: rw, MsgMax: msgMax}
 }
 
-func (rw *MsgRWIO) ReadMsg() (id MsgId, m Msg, err error) {
+func (rw *MsgRWIO) ReadMsg() (t MsgType, m Msg, err error) {
 	var _l int32
 	err = binary.Read(rw.RW, binary.BigEndian, &_l)
 	if err != nil {
@@ -73,12 +73,12 @@ func (rw *MsgRWIO) ReadMsg() (id MsgId, m Msg, err error) {
 		return
 	}
 
-	var _id int32
-	err = binary.Read(rw.RW, binary.BigEndian, &_id)
+	var _t int32
+	err = binary.Read(rw.RW, binary.BigEndian, &_t)
 	if err != nil {
 		return
 	}
-	id = MsgId(_id)
+	t = MsgType(_t)
 
 	m = poolutil.BufGet(l)
 	readed := 0
@@ -94,10 +94,10 @@ func (rw *MsgRWIO) ReadMsg() (id MsgId, m Msg, err error) {
 		}
 	}
 
-	return id, m, nil
+	return t, m, nil
 }
 
-func (rw *MsgRWIO) WriteMsg(id MsgId, m Msg) (err error) {
+func (rw *MsgRWIO) WriteMsg(t MsgType, m Msg) (err error) {
 	l := len(m)
 	if l > rw.MsgMax {
 		err = ErrMsgTooBig
@@ -110,7 +110,7 @@ func (rw *MsgRWIO) WriteMsg(id MsgId, m Msg) (err error) {
 		return
 	}
 
-	err = binary.Write(rw.RW, binary.BigEndian, int32(id))
+	err = binary.Write(rw.RW, binary.BigEndian, int32(t))
 	if err != nil {
 		return
 	}
@@ -149,18 +149,18 @@ var DefaultIOC = Converter(&DefaultConverter{MsgMax: DefaultMaxMsg})
 /*
 The dump format is:
 
-	R|W\nMessageId\nMessageSize\nMessageData\n\n
+	R|W\nMessageType\nMessageSize\nMessageData\n\n
 	R for read, W for write
 	MessageData part is raw data
 */
 type MsgRWDump struct {
 	rw        MsgReadWriter
-	ifDiscard func(MsgId, Msg) bool
+	ifDiscard func(MsgType, Msg) bool
 	dL        sync.Mutex
 	dump      io.ReadWriteCloser
 }
 
-func NewMsgRWDump(rw MsgReadWriter, ifDiscard func(MsgId,
+func NewMsgRWDump(rw MsgReadWriter, ifDiscard func(MsgType,
 	Msg) bool) *MsgRWDump {
 
 	return &MsgRWDump{rw: rw, ifDiscard: ifDiscard}
@@ -190,13 +190,13 @@ func (rw *MsgRWDump) OnStop() {
 }
 
 // Not support concurrently access.
-func (rw *MsgRWDump) ReadMsg() (id MsgId, m Msg, err error) {
-	id, m, err = rw.rw.ReadMsg()
+func (rw *MsgRWDump) ReadMsg() (t MsgType, m Msg, err error) {
+	t, m, err = rw.rw.ReadMsg()
 	if err != nil {
 		return
 	}
 
-	if rw.ifDiscard != nil && rw.ifDiscard(id, m) {
+	if rw.ifDiscard != nil && rw.ifDiscard(t, m) {
 		return
 	}
 
@@ -208,7 +208,7 @@ func (rw *MsgRWDump) ReadMsg() (id MsgId, m Msg, err error) {
 		return
 	}
 
-	fmt.Fprintf(d, "R %v %v\n", id, len(m))
+	fmt.Fprintf(d, "R %v %v\n", t, len(m))
 	d.Write(m)
 	fmt.Fprintf(d, "\n\n")
 
@@ -216,13 +216,13 @@ func (rw *MsgRWDump) ReadMsg() (id MsgId, m Msg, err error) {
 }
 
 // Not support concurrently access.
-func (rw *MsgRWDump) WriteMsg(id MsgId, m Msg) (err error) {
-	err = rw.rw.WriteMsg(id, m)
+func (rw *MsgRWDump) WriteMsg(t MsgType, m Msg) (err error) {
+	err = rw.rw.WriteMsg(t, m)
 	if err != nil {
 		return
 	}
 
-	if rw.ifDiscard != nil && rw.ifDiscard(id, m) {
+	if rw.ifDiscard != nil && rw.ifDiscard(t, m) {
 		return
 	}
 
@@ -234,7 +234,7 @@ func (rw *MsgRWDump) WriteMsg(id MsgId, m Msg) (err error) {
 		return
 	}
 
-	fmt.Fprintf(d, "W %v %v\n", id, len(m))
+	fmt.Fprintf(d, "W %v %v\n", t, len(m))
 	d.Write(m)
 	fmt.Fprintf(d, "\n\n")
 

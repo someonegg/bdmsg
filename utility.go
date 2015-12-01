@@ -14,7 +14,7 @@ var (
 )
 
 type msgInfo struct {
-	id   MsgId
+	t    MsgType
 	size int
 }
 
@@ -42,23 +42,23 @@ func (r *msgInfoRing) Full() bool {
 }
 
 // Panic if full.
-func (r *msgInfoRing) PushBack(id MsgId, size int) {
+func (r *msgInfoRing) PushBack(t MsgType, size int) {
 	if r.size >= r.N {
 		panic(errRingFull)
 	}
 	i := (r.beg + r.size) % r.N
-	r.infos[i].id = id
+	r.infos[i].t = t
 	r.infos[i].size = size
 	r.size += 1
 }
 
 // Panic if empty.
-func (r *msgInfoRing) PopFront() (MsgId, int) {
+func (r *msgInfoRing) PopFront() (MsgType, int) {
 	if r.size == 0 {
 		panic(errRingEmpty)
 	}
 	info := r.infos[r.beg]
 	r.size -= 1
 	r.beg = (r.beg + 1) % r.N
-	return info.id, info.size
+	return info.t, info.size
 }

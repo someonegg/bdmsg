@@ -23,23 +23,23 @@ var (
 
 type msgEntry struct {
 	list.DefElem
-	id MsgId
-	m  Msg
+	t MsgType
+	m Msg
 }
 
 var msgeFree = sync.Pool{
 	New: func() interface{} { return new(msgEntry) },
 }
 
-func newMsgEntry(id MsgId, m Msg) *msgEntry {
+func newMsgEntry(t MsgType, m Msg) *msgEntry {
 	e := msgeFree.Get().(*msgEntry)
-	e.id = id
+	e.t = t
 	e.m = m
 	return e
 }
 
 func freeMsgEntry(e *msgEntry) {
-	e.id = 0
+	e.t = 0
 	e.m = nil
 	msgeFree.Put(e)
 }
@@ -47,7 +47,7 @@ func freeMsgEntry(e *msgEntry) {
 // Objects implementing the Handler interface can be registered
 // to process messages in the message pumper.
 type Handler interface {
-	Process(ctx context.Context, p *Pumper, id MsgId, m Msg)
+	Process(ctx context.Context, p *Pumper, t MsgType, m Msg)
 }
 
 type PumpStat struct {
@@ -164,7 +164,7 @@ func (p *Pumper) work(ctx context.Context,
 			e := p.popRMsg()
 			if e != nil {
 				atomic.AddInt64(&p.stat.ProcessN, 1)
-				p.procMsg(ctx, e.id, e.m)
+				p.procMsg(ctx, e.t, e.m)
 				poolutil.BufPut(e.m)
 				freeMsgEntry(e)
 			}
@@ -202,8 +202,8 @@ func (p *Pumper) ending(rwqF context.CancelFunc, sn StopNotifier) {
 	p.stopD.SetDone()
 }
 
-func (p *Pumper) procMsg(ctx context.Context, id MsgId, m Msg) {
-	p.h.Process(ctx, p, id, m)
+func (p *Pumper) procMsg(ctx context.Context, t MsgType, m Msg) {
+	p.h.Process(ctx, p, t, m)
 }
 
 const readPauseTime = 10 * time.Millisecond
@@ -212,8 +212,8 @@ func (p *Pumper) bgRead(ctx context.Context) {
 	defer p.brEnding()
 
 	for q := false; !q; {
-		id, m := p.readMsg()
-		p.pushRMsg(id, m)
+		t, m := p.readMsg()
+		p.pushRMsg(t, m)
 		atomic.AddInt64(&p.stat.InN, 1)
 
 		if p.imax > 0 && p.rQ.Len() > p.imax {
@@ -249,8 +249,8 @@ func (p *Pumper) brEnding() {
 	p.rsD.SetDone()
 }
 
-func (p *Pumper) pushRMsg(id MsgId, m Msg) {
-	p.rQ.PushBack(newMsgEntry(id, m))
+func (p *Pumper) pushRMsg(t MsgType, m Msg) {
+	p.rQ.PushBack(newMsgEntry(t, m))
 }
 
 func (p *Pumper) popRMsg() *msgEntry {
@@ -261,12 +261,12 @@ func (p *Pumper) popRMsg() *msgEntry {
 	return e.(*msgEntry)
 }
 
-func (p *Pumper) readMsg() (MsgId, Msg) {
-	id, m, err := p.rw.ReadMsg()
+func (p *Pumper) readMsg() (MsgType, Msg) {
+	t, m, err := p.rw.ReadMsg()
 	if err != nil {
 		panic(err)
 	}
-	return id, m
+	return t, m
 }
 
 func (p *Pumper) bgWrite(ctx context.Context) {
@@ -281,9 +281,9 @@ func (p *Pumper) bgWrite(ctx context.Context) {
 		case <-wEvt:
 			e := p.popWMsg()
 			if e != nil {
-				p.backupWMsg(e.id, e.m)
+				p.backupWMsg(e.t, e.m)
 				atomic.AddInt64(&p.stat.OutN, 1)
-				p.writeMsg(e.id, e.m)
+				p.writeMsg(e.t, e.m)
 				poolutil.BufPut(e.m)
 				freeMsgEntry(e)
 			}
@@ -304,8 +304,8 @@ func (p *Pumper) bwEnding() {
 	p.wsD.SetDone()
 }
 
-func (p *Pumper) pushWMsg(id MsgId, m Msg) {
-	p.wQ.PushBack(newMsgEntry(id, m))
+func (p *Pumper) pushWMsg(t MsgType, m Msg) {
+	p.wQ.PushBack(newMsgEntry(t, m))
 }
 
 func (p *Pumper) popWMsg() *msgEntry {
@@ -316,14 +316,14 @@ func (p *Pumper) popWMsg() *msgEntry {
 	return e.(*msgEntry)
 }
 
-func (p *Pumper) writeMsg(id MsgId, m Msg) {
-	err := p.rw.WriteMsg(id, m)
+func (p *Pumper) writeMsg(t MsgType, m Msg) {
+	err := p.rw.WriteMsg(t, m)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (p *Pumper) backupWMsg(id MsgId, m Msg) {
+func (p *Pumper) backupWMsg(t MsgType, m Msg) {
 	if p.bI.N <= 0 {
 		return
 	}
@@ -334,7 +334,7 @@ func (p *Pumper) backupWMsg(id MsgId, m Msg) {
 		p.bB.Skip(l)
 	}
 
-	p.bI.PushBack(id, len(m))
+	p.bI.PushBack(t, len(m))
 	p.bB.Write(m)
 
 	atomic.StoreInt64(&p.stat.BackupN, int64(p.bI.Len()))
@@ -368,28 +368,28 @@ func (p *Pumper) Stopped() bool {
 }
 
 // Copy the message data to the in-queue.
-func (p *Pumper) PostIn(id MsgId, m Msg) {
+func (p *Pumper) PostIn(t MsgType, m Msg) {
 	p.newerLock.RLock()
 	defer p.newerLock.RUnlock()
 	if p.newer != nil {
-		p.newer.PostIn(id, m)
+		p.newer.PostIn(t, m)
 	} else {
 		cp := poolutil.BufGet(len(m))
 		copy(cp, m)
-		p.pushRMsg(id, cp)
+		p.pushRMsg(t, cp)
 	}
 }
 
 // Copy the message data to the out-queue.
-func (p *Pumper) PostOut(id MsgId, m Msg) {
+func (p *Pumper) PostOut(t MsgType, m Msg) {
 	p.newerLock.RLock()
 	defer p.newerLock.RUnlock()
 	if p.newer != nil {
-		p.newer.PostOut(id, m)
+		p.newer.PostOut(t, m)
 	} else {
 		cp := poolutil.BufGet(len(m))
 		copy(cp, m)
-		p.pushWMsg(id, cp)
+		p.pushWMsg(t, cp)
 	}
 }
 
@@ -440,10 +440,10 @@ func (p *Pumper) Inherit(older *Pumper, reOutN int) bool {
 		op.bB.Skip(l)
 	}
 	for i := 0; i < reOutN; i++ {
-		id, l := op.bI.PopFront()
+		t, l := op.bI.PopFront()
 		m := poolutil.BufGet(l)
 		op.bB.Read(m)
-		p.wQ.List().PushBack(newMsgEntry(id, m))
+		p.wQ.List().PushBack(newMsgEntry(t, m))
 	}
 
 	// out
@@ -471,69 +471,69 @@ func (p *Pumper) InnerMsgRW() MsgReadWriter {
 
 // PumpMux is an message request multiplexer.
 //
-// It matches the id of each message against a list of registered
-// ids and calls the handler for the id that matches.
+// It matches the type of each message against a list of registered
+// types and calls the matched handler.
 //
 // Multiple goroutines can invoke methods on a PumpMux simultaneously.
 type PumpMux struct {
 	mu     sync.RWMutex
-	m      map[MsgId]Handler
+	m      map[MsgType]Handler
 	orphan Handler
 }
 
 // NewPumpMux allocates and returns a new PumpMux.
 func NewPumpMux(orphan Handler) *PumpMux {
 	return &PumpMux{
-		m:      make(map[MsgId]Handler),
+		m:      make(map[MsgType]Handler),
 		orphan: orphan,
 	}
 }
 
 // Process dispatches the request to the handler whose
-// id matches the message id.
-func (mux *PumpMux) Process(ctx context.Context, p *Pumper, id MsgId, m Msg) {
+// type matches the message type.
+func (mux *PumpMux) Process(ctx context.Context, p *Pumper, t MsgType, m Msg) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
-	if h, ok := mux.m[id]; ok {
-		h.Process(ctx, p, id, m)
+	if h, ok := mux.m[t]; ok {
+		h.Process(ctx, p, t, m)
 	} else {
 		if mux.orphan != nil {
-			mux.orphan.Process(ctx, p, id, m)
+			mux.orphan.Process(ctx, p, t, m)
 		}
 	}
 }
 
-// Handle registers the handler for the given id.
-// If a handler already exists for id, Handle panics.
-func (mux *PumpMux) Handle(id MsgId, h Handler) {
+// Handle registers the handler for the given type.
+// If a handler already exists for type, Handle panics.
+func (mux *PumpMux) Handle(t MsgType, h Handler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
 	if h == nil {
 		panic("msgpump: nil handler")
 	}
-	if _, ok := mux.m[id]; ok {
+	if _, ok := mux.m[t]; ok {
 		panic("msgpump: multiple registrations")
 	}
 
-	mux.m[id] = h
+	mux.m[t] = h
 }
 
-// HandleFunc registers the handler function for the given id.
-func (mux *PumpMux) HandleFunc(id MsgId, h func(context.Context,
-	*Pumper, MsgId, Msg)) {
+// HandleFunc registers the handler function for the given type.
+func (mux *PumpMux) HandleFunc(t MsgType, h func(context.Context,
+	*Pumper, MsgType, Msg)) {
 
-	mux.Handle(id, HandlerFunc(h))
+	mux.Handle(t, HandlerFunc(h))
 }
 
 // The HandlerFunc type is an adapter to allow the use of
 // ordinary functions as message handlers.  If f is a function
 // with the appropriate signature, HandlerFunc(f) is a
 // Handler object that calls f.
-type HandlerFunc func(context.Context, *Pumper, MsgId, Msg)
+type HandlerFunc func(context.Context, *Pumper, MsgType, Msg)
 
-// Process calls f(ctx, p, id, m).
-func (f HandlerFunc) Process(ctx context.Context, p *Pumper, id MsgId, m Msg) {
-	f(ctx, p, id, m)
+// Process calls f(ctx, p, t, m).
+func (f HandlerFunc) Process(ctx context.Context, p *Pumper, t MsgType, m Msg) {
+	f(ctx, p, t, m)
 }

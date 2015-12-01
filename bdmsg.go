@@ -5,6 +5,6 @@
 // Package bgmsg implements bidirectional directly message protocol.
 //
 // Here, message is defined as variable-length byte array, they are
-// distinguished by message-id, they can be freely transferred between
+// distinguished by message-type, they can be freely transferred between
 // the server and the client.
 package bdmsg
