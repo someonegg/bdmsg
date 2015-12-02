@@ -38,7 +38,8 @@ func NewSClient(parent context.Context, c net.Conn, ioc Converter,
 	t := &SClient{}
 	t.c = c
 	t.wg = wg
-	t.Pumper.init(rw, h, t, pumperInN, pumperOutN)
+	t.Pumper.init(rw, h, pumperInN, pumperOutN)
+	t.Pumper.SetUserData(t)
 	t.Pumper.Start(parent, t)
 
 	return t

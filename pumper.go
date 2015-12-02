@@ -62,22 +62,17 @@ type Pumper struct {
 }
 
 // NewPumper allocates and returns a new Pumper.
-func NewPumper(rw MsgReadWriter, h PumperHandler,
-	ud interface{}, inN, outN int) *Pumper {
-
+func NewPumper(rw MsgReadWriter, h PumperHandler, inN, outN int) *Pumper {
 	t := &Pumper{}
-	t.init(rw, h, ud, inN, outN)
+	t.init(rw, h, inN, outN)
 	return t
 }
 
-func (p *Pumper) init(rw MsgReadWriter, h PumperHandler,
-	ud interface{}, inN, outN int) {
-
+func (p *Pumper) init(rw MsgReadWriter, h PumperHandler, inN, outN int) {
 	p.stopD = chanutil.NewDoneChan()
 
 	p.rw = rw
 	p.h = h
-	p.ud.Store(ud)
 
 	p.rD = chanutil.NewDoneChan()
 	p.rQ = make(chan msgEntry, inN)
