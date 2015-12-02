@@ -9,11 +9,9 @@ import (
 	"golang.org/x/net/context"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
-
-// Default handshake timeout.
-const defaultHSTO = 1 * time.Second
 
 // SClient represents a message client in the server side.
 // You can send(recive) message to(from) client use SClient.Pumper().
@@ -25,31 +23,23 @@ type SClient struct {
 	c  net.Conn
 	wg *sync.WaitGroup
 
-	handshaked bool
-
-	o     interface{}
-	oLock sync.RWMutex
+	handshaked int32
+	owner      atomic.Value
 }
 
-// See NewSClientF.
-func NewSClient(parent context.Context, c net.Conn, h Handler) *SClient {
-	return NewSClientF(parent, c, h, 100, 0, DefaultIOC, nil)
-}
-
-// NewSClientF allocates and returns a new SClient.
+// NewSClient allocates and returns a new SClient.
 //
 // The ownership of c will be transferred to SClient, dont
 // control it in other places.
-func NewSClientF(parent context.Context, c net.Conn, h Handler,
-	pumperMaxIn, pumperMaxBackup int, ioc Converter,
-	wg *sync.WaitGroup) *SClient {
+func NewSClient(parent context.Context, c net.Conn, ioc Converter,
+	h PumperHandler, pumperInN, pumperOutN int, wg *sync.WaitGroup) *SClient {
 
 	rw := ioc.Convert(c)
 
 	t := &SClient{}
 	t.c = c
 	t.wg = wg
-	t.Pumper.init(rw, h, t, pumperMaxIn, pumperMaxBackup)
+	t.Pumper.init(rw, h, t, pumperInN, pumperOutN)
 	t.Pumper.Start(parent, t)
 
 	return t
@@ -75,27 +65,19 @@ func (c *SClient) Conn() net.Conn {
 }
 
 func (c *SClient) Handshake() {
-	c.oLock.Lock()
-	defer c.oLock.Unlock()
-	c.handshaked = true
+	atomic.StoreInt32(&c.handshaked, 1)
 }
 
 func (c *SClient) Handshaked() bool {
-	c.oLock.RLock()
-	defer c.oLock.RUnlock()
-	return c.handshaked
+	return atomic.LoadInt32(&c.handshaked) == 1
 }
 
 func (c *SClient) Owner() interface{} {
-	c.oLock.RLock()
-	defer c.oLock.RUnlock()
-	return c.o
+	return c.owner.Load()
 }
 
 func (c *SClient) SetOwner(o interface{}) {
-	c.oLock.Lock()
-	defer c.oLock.Unlock()
-	c.o = o
+	c.owner.Store(o)
 }
 
 // Server represents a message server.
@@ -108,37 +90,33 @@ type Server struct {
 	quitF   context.CancelFunc
 	stopD   chanutil.DoneChan
 
-	l               net.Listener
-	h               Handler
-	hsto            time.Duration
-	pumperMaxIn     int
-	pumperMaxBackup int
-	ioc             Converter
+	l    net.Listener
+	ioc  Converter
+	hsto time.Duration
+
+	h          PumperHandler
+	pumperInN  int
+	pumperOutN int
 
 	cliWG sync.WaitGroup
 }
 
-// See NewServerF
-func NewServer(l net.Listener, h Handler) *Server {
-	return NewServerF(l, h, defaultHSTO, 100, 0, DefaultIOC)
-}
-
-// NewServerF allocates and returns a new Server.
+// NewServer allocates and returns a new Server.
 //
 // Note: hsto is "handshake timeout".
-func NewServerF(l net.Listener, h Handler, hsto time.Duration,
-	pumperMaxIn, pumperMaxBackup int, ioc Converter) *Server {
+func NewServerF(l net.Listener, ioc Converter, hsto time.Duration,
+	h PumperHandler, pumperInN, pumperOutN int) *Server {
 
 	s := &Server{}
 
 	s.quitCtx, s.quitF = context.WithCancel(context.Background())
 	s.stopD = chanutil.NewDoneChan()
 	s.l = l
-	s.h = h
-	s.hsto = hsto
-	s.pumperMaxIn = pumperMaxIn
-	s.pumperMaxBackup = pumperMaxBackup
 	s.ioc = ioc
+	s.hsto = hsto
+	s.h = h
+	s.pumperInN = pumperInN
+	s.pumperOutN = pumperOutN
 
 	return s
 }
@@ -182,9 +160,8 @@ func (s *Server) ending() {
 
 func (s *Server) newClient(c net.Conn) {
 	s.cliWG.Add(1)
-	cli := NewSClientF(s.quitCtx, c, s.h,
-		s.pumperMaxIn, s.pumperMaxBackup, s.ioc,
-		&(s.cliWG))
+	cli := NewSClient(s.quitCtx, c, s.ioc,
+		s.h, s.pumperInN, s.pumperOutN, &s.cliWG)
 
 	if s.hsto > 0 {
 		go monitorHSTO(cli, s.hsto)

@@ -132,6 +132,10 @@ type Converter interface {
 	Convert(rw io.ReadWriter) MsgReadWriter
 }
 
+type StopNotifier interface {
+	OnStop()
+}
+
 // The default maximum message length is 128K.
 const DefaultMaxMsg = 128 * 1024
 
@@ -155,38 +159,45 @@ The dump format is:
 */
 type MsgRWDump struct {
 	rw        MsgReadWriter
-	ifDiscard func(MsgType, Msg) bool
-	dL        sync.Mutex
+	careAbout func(MsgType, Msg) bool
+	locker    sync.Mutex
 	dump      io.ReadWriteCloser
 }
 
-func NewMsgRWDump(rw MsgReadWriter, ifDiscard func(MsgType,
-	Msg) bool) *MsgRWDump {
+func NewMsgRWDump(rw MsgReadWriter,
+	careAbout func(MsgType, Msg) bool) *MsgRWDump {
 
-	return &MsgRWDump{rw: rw, ifDiscard: ifDiscard}
+	return &MsgRWDump{rw: rw, careAbout: careAbout}
 }
 
 func (rw *MsgRWDump) SetDump(dump io.ReadWriteCloser) io.ReadWriteCloser {
-	rw.dL.Lock()
-	defer rw.dL.Unlock()
+	rw.locker.Lock()
+	defer rw.locker.Unlock()
 	od := rw.dump
 	rw.dump = dump
 	return od
 }
 
 func (rw *MsgRWDump) Dump() io.ReadWriteCloser {
-	rw.dL.Lock()
-	defer rw.dL.Unlock()
+	rw.locker.Lock()
+	defer rw.locker.Unlock()
 	return rw.dump
 }
 
 func (rw *MsgRWDump) OnStop() {
-	rw.dL.Lock()
-	defer rw.dL.Unlock()
+	rw.locker.Lock()
+	defer rw.locker.Unlock()
 	if rw.dump != nil {
 		rw.dump.Close()
 		rw.dump = nil
 	}
+}
+
+func (rw *MsgRWDump) needDump(t MsgType, m Msg) bool {
+	if rw.careAbout != nil {
+		return rw.careAbout(t, m)
+	}
+	return true
 }
 
 // Not support concurrently access.
@@ -196,12 +207,12 @@ func (rw *MsgRWDump) ReadMsg() (t MsgType, m Msg, err error) {
 		return
 	}
 
-	if rw.ifDiscard != nil && rw.ifDiscard(t, m) {
+	if !rw.needDump(t, m) {
 		return
 	}
 
-	rw.dL.Lock()
-	defer rw.dL.Unlock()
+	rw.locker.Lock()
+	defer rw.locker.Unlock()
 
 	d := rw.dump
 	if d == nil {
@@ -222,12 +233,12 @@ func (rw *MsgRWDump) WriteMsg(t MsgType, m Msg) (err error) {
 		return
 	}
 
-	if rw.ifDiscard != nil && rw.ifDiscard(t, m) {
+	if !rw.needDump(t, m) {
 		return
 	}
 
-	rw.dL.Lock()
-	defer rw.dL.Unlock()
+	rw.locker.Lock()
+	defer rw.locker.Unlock()
 
 	d := rw.dump
 	if d == nil {

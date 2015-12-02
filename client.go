@@ -18,23 +18,18 @@ type Client struct {
 	c net.Conn
 }
 
-// See NewClientF.
-func NewClient(parent context.Context, c net.Conn, h Handler) *Client {
-	return NewClientF(parent, c, h, 100, 0, DefaultIOC)
-}
-
-// NewClientF allocates and returns a new Client.
+// NewClient allocates and returns a new Client.
 //
 // The ownership of c will be transferred to Client, dont
 // control it in other places.
-func NewClientF(parent context.Context, c net.Conn, h Handler,
-	pumperMaxIn, pumperMaxBackup int, ioc Converter) *Client {
+func NewClient(parent context.Context, c net.Conn, ioc Converter,
+	h PumperHandler, pumperInN, pumperOutN int) *Client {
 
 	rw := ioc.Convert(c)
 
 	t := &Client{}
 	t.c = c
-	t.Pumper.init(rw, h, t, pumperMaxIn, pumperMaxBackup)
+	t.Pumper.init(rw, h, t, pumperInN, pumperOutN)
 	t.Pumper.Start(parent, t)
 
 	return t
