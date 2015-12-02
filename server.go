@@ -24,7 +24,6 @@ type SClient struct {
 	wg *sync.WaitGroup
 
 	handshaked int32
-	owner      atomic.Value
 }
 
 // NewSClient allocates and returns a new SClient.
@@ -55,7 +54,7 @@ func (c *SClient) OnStop() {
 	}
 }
 
-// The pumper's userdata is *SClient.
+// The pumper's initial userdata is *SClient.
 func (c *SClient) InnerPumper() *Pumper {
 	return &c.Pumper
 }
@@ -70,14 +69,6 @@ func (c *SClient) Handshake() {
 
 func (c *SClient) Handshaked() bool {
 	return atomic.LoadInt32(&c.handshaked) == 1
-}
-
-func (c *SClient) Owner() interface{} {
-	return c.owner.Load()
-}
-
-func (c *SClient) SetOwner(o interface{}) {
-	c.owner.Store(o)
 }
 
 // Server represents a message server.

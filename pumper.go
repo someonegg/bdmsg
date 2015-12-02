@@ -46,7 +46,7 @@ type Pumper struct {
 
 	rw MsgReadWriter
 	h  PumperHandler
-	ud interface{}
+	ud atomic.Value
 
 	// read
 	rerr error
@@ -77,7 +77,7 @@ func (p *Pumper) init(rw MsgReadWriter, h PumperHandler,
 
 	p.rw = rw
 	p.h = h
-	p.ud = ud
+	p.ud.Store(ud)
 
 	p.rD = chanutil.NewDoneChan()
 	p.rQ = make(chan msgEntry, inN)
@@ -309,7 +309,11 @@ func (p *Pumper) Statis() *PumperStatis {
 
 // Return the data user setted.
 func (p *Pumper) UserData() interface{} {
-	return p.ud
+	return p.ud.Load()
+}
+
+func (p *Pumper) SetUserData(ud interface{}) {
+	p.ud.Store(ud)
 }
 
 // Return the inner message readwriter.
