@@ -46,7 +46,7 @@ type Pumper struct {
 
 	rw MsgReadWriter
 	h  PumperHandler
-	ud atomic.Value
+	ud interface{}
 
 	// read
 	rerr error
@@ -304,11 +304,11 @@ func (p *Pumper) Statis() *PumperStatis {
 
 // Return the data user setted.
 func (p *Pumper) UserData() interface{} {
-	return p.ud.Load()
+	return p.ud
 }
 
 func (p *Pumper) SetUserData(ud interface{}) {
-	p.ud.Store(ud)
+	p.ud = ud
 }
 
 // Return the inner message readwriter.
