@@ -147,6 +147,7 @@ func (s *Server) ending() {
 		}
 	}
 
+	s.quitF()
 	s.stopD.SetDone()
 }
 
