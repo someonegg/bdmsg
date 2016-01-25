@@ -77,10 +77,9 @@ func (c *SClient) Handshaked() bool {
 //
 // Multiple goroutines can invoke methods on a Server simultaneously.
 type Server struct {
-	err     error
-	quitCtx context.Context
-	quitF   context.CancelFunc
-	stopD   chanutil.DoneChan
+	err   error
+	quitF context.CancelFunc
+	stopD chanutil.DoneChan
 
 	l    net.Listener
 	ioc  Converter
@@ -99,22 +98,23 @@ type Server struct {
 func NewServerF(l net.Listener, ioc Converter, hsto time.Duration,
 	h PumperHandler, pumperInN, pumperOutN int) *Server {
 
-	s := &Server{}
-
-	s.quitCtx, s.quitF = context.WithCancel(context.Background())
-	s.stopD = chanutil.NewDoneChan()
-	s.l = l
-	s.ioc = ioc
-	s.hsto = hsto
-	s.h = h
-	s.pumperInN = pumperInN
-	s.pumperOutN = pumperOutN
+	s := &Server{
+		stopD:      chanutil.NewDoneChan(),
+		l:          l,
+		ioc:        ioc,
+		hsto:       hsto,
+		h:          h,
+		pumperInN:  pumperInN,
+		pumperOutN: pumperOutN,
+	}
 
 	return s
 }
 
 func (s *Server) Start() {
-	go s.work(s.quitCtx)
+	ctx, quitF := context.WithCancel(context.Background())
+	s.quitF = quitF
+	go s.work(ctx)
 }
 
 func (s *Server) work(ctx context.Context) {
@@ -126,7 +126,7 @@ func (s *Server) work(ctx context.Context) {
 			panic(err)
 		}
 		if c != nil {
-			s.newClient(c)
+			s.newClient(ctx, c)
 		}
 
 		select {
@@ -150,9 +150,9 @@ func (s *Server) ending() {
 	s.stopD.SetDone()
 }
 
-func (s *Server) newClient(c net.Conn) {
+func (s *Server) newClient(ctx context.Context, c net.Conn) {
 	s.cliWG.Add(1)
-	cli := NewSClient(s.quitCtx, c, s.ioc,
+	cli := NewSClient(ctx, c, s.ioc,
 		s.h, s.pumperInN, s.pumperOutN, &s.cliWG)
 
 	if s.hsto > 0 {

@@ -128,6 +128,7 @@ func (p *Pumper) ending(rwqF context.CancelFunc, sn StopNotifier) {
 	}
 
 	defer func() { recover() }()
+	defer p.stopD.SetDone()
 
 	// if ending from error.
 	p.quitF()
@@ -139,8 +140,6 @@ func (p *Pumper) ending(rwqF context.CancelFunc, sn StopNotifier) {
 
 	<-p.rD
 	<-p.wD
-
-	p.stopD.SetDone()
 }
 
 func (p *Pumper) procMsg(ctx context.Context, t MsgType, m Msg) {
