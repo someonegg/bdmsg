@@ -64,6 +64,8 @@ func (c *SClient) Conn() net.Conn {
 	return c.c
 }
 
+// Tell bdmsg that client is authorized.
+// Unauthorized client will be closed after HSTO.
 func (c *SClient) Handshake() {
 	atomic.StoreInt32(&c.handshaked, 1)
 }
