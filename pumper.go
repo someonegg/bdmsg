@@ -6,8 +6,8 @@ package bdmsg
 
 import (
 	"errors"
-	"github.com/someonegg/goutility/chanutil"
-	"github.com/someonegg/goutility/poolutil"
+	"github.com/someonegg/gocontainer/bufpool"
+	"github.com/someonegg/gox/syncx"
 	"golang.org/x/net/context"
 	"sync"
 	"sync/atomic"
@@ -42,7 +42,7 @@ type PumperStatis struct {
 type Pumper struct {
 	err   error
 	quitF context.CancelFunc
-	stopD chanutil.DoneChan
+	stopD syncx.DoneChan
 
 	rw MsgReadWriter
 	h  PumperHandler
@@ -50,12 +50,12 @@ type Pumper struct {
 
 	// read
 	rerr error
-	rD   chanutil.DoneChan
+	rD   syncx.DoneChan
 	rQ   chan msgEntry
 
 	// write
 	werr error
-	wD   chanutil.DoneChan
+	wD   syncx.DoneChan
 	wQ   chan msgEntry
 
 	stat PumperStatis
@@ -69,14 +69,14 @@ func NewPumper(rw MsgReadWriter, h PumperHandler, inN, outN int) *Pumper {
 }
 
 func (p *Pumper) init(rw MsgReadWriter, h PumperHandler, inN, outN int) {
-	p.stopD = chanutil.NewDoneChan()
+	p.stopD = syncx.NewDoneChan()
 
 	p.rw = rw
 	p.h = h
 
-	p.rD = chanutil.NewDoneChan()
+	p.rD = syncx.NewDoneChan()
 	p.rQ = make(chan msgEntry, inN)
-	p.wD = chanutil.NewDoneChan()
+	p.wD = syncx.NewDoneChan()
 	p.wQ = make(chan msgEntry, outN)
 }
 
@@ -108,7 +108,7 @@ func (p *Pumper) work(ctx context.Context,
 		case e := <-p.rQ:
 			atomic.AddInt64(&p.stat.InProcess, 1)
 			p.procMsg(ctx, e.t, e.m)
-			poolutil.BufPut(e.m)
+			bufpool.Put(e.m)
 		case <-p.rD:
 			q = true
 		case <-p.wD:
@@ -201,7 +201,7 @@ func (p *Pumper) writing(ctx context.Context) {
 		case e := <-p.wQ:
 			atomic.AddInt64(&p.stat.OutProcess, 1)
 			p.writeMsg(e.t, e.m)
-			poolutil.BufPut(e.m)
+			bufpool.Put(e.m)
 		}
 	}
 }
@@ -232,7 +232,7 @@ func (p *Pumper) Stop() {
 
 // Returns a done channel, it will be
 // signaled when the pumper is stopped.
-func (p *Pumper) StopD() chanutil.DoneChanR {
+func (p *Pumper) StopD() syncx.DoneChanR {
 	return p.stopD.R()
 }
 
@@ -242,52 +242,52 @@ func (p *Pumper) Stopped() bool {
 
 // Copy the message data to the in-queue.
 func (p *Pumper) Input(t MsgType, m Msg) {
-	cp := poolutil.BufGet(len(m))
+	cp := bufpool.Get(len(m))
 	copy(cp, m)
 	select {
 	case p.rQ <- msgEntry{t, cp}:
 		atomic.AddInt64(&p.stat.InTotal, 1)
 	case <-p.stopD:
-		poolutil.BufPut(cp)
+		bufpool.Put(cp)
 	}
 }
 
 // Try copy the message data to the in-queue.
 func (p *Pumper) TryInput(t MsgType, m Msg) bool {
-	cp := poolutil.BufGet(len(m))
+	cp := bufpool.Get(len(m))
 	copy(cp, m)
 	select {
 	case p.rQ <- msgEntry{t, cp}:
 		atomic.AddInt64(&p.stat.InTotal, 1)
 		return true
 	default:
-		poolutil.BufPut(cp)
+		bufpool.Put(cp)
 		return false
 	}
 }
 
 // Copy the message data to the out-queue.
 func (p *Pumper) Output(t MsgType, m Msg) {
-	cp := poolutil.BufGet(len(m))
+	cp := bufpool.Get(len(m))
 	copy(cp, m)
 	select {
 	case p.wQ <- msgEntry{t, cp}:
 		atomic.AddInt64(&p.stat.OutTotal, 1)
 	case <-p.stopD:
-		poolutil.BufPut(cp)
+		bufpool.Put(cp)
 	}
 }
 
 // Try copy the message data to the out-queue.
 func (p *Pumper) TryOutput(t MsgType, m Msg) bool {
-	cp := poolutil.BufGet(len(m))
+	cp := bufpool.Get(len(m))
 	copy(cp, m)
 	select {
 	case p.wQ <- msgEntry{t, cp}:
 		atomic.AddInt64(&p.stat.OutTotal, 1)
 		return true
 	default:
-		poolutil.BufPut(cp)
+		bufpool.Put(cp)
 		return false
 	}
 }

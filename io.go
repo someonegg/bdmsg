@@ -8,7 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/someonegg/goutility/poolutil"
+	"github.com/someonegg/gocontainer/bufpool"
 	"io"
 	"sync"
 )
@@ -80,7 +80,7 @@ func (rw *MsgRWIO) ReadMsg() (t MsgType, m Msg, err error) {
 	}
 	t = MsgType(_t)
 
-	m = poolutil.BufGet(l)
+	m = bufpool.Get(l)
 	readed := 0
 	for readed < l {
 		var n int

@@ -5,7 +5,7 @@
 package bdmsg
 
 import (
-	"github.com/someonegg/goutility/chanutil"
+	"github.com/someonegg/gox/syncx"
 	"golang.org/x/net/context"
 	"net"
 	"sync"
@@ -81,7 +81,7 @@ func (c *SClient) Handshaked() bool {
 type Server struct {
 	err   error
 	quitF context.CancelFunc
-	stopD chanutil.DoneChan
+	stopD syncx.DoneChan
 
 	l    net.Listener
 	ioc  Converter
@@ -101,7 +101,7 @@ func NewServerF(l net.Listener, ioc Converter, hsto time.Duration,
 	h PumperHandler, pumperInN, pumperOutN int) *Server {
 
 	s := &Server{
-		stopD:      chanutil.NewDoneChan(),
+		stopD:      syncx.NewDoneChan(),
 		l:          l,
 		ioc:        ioc,
 		hsto:       hsto,
@@ -187,7 +187,7 @@ func (s *Server) Stop() {
 
 // Returns a done channel, it will be
 // signaled when the server is stopped.
-func (s *Server) StopD() chanutil.DoneChanR {
+func (s *Server) StopD() syncx.DoneChanR {
 	return s.stopD.R()
 }
 
