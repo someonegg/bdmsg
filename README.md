@@ -10,6 +10,7 @@ Documentation
 -------------
 
 - [API Reference](http://godoc.org/github.com/someonegg/bdmsg)
+- [Example](https://github.com/someonegg/bdmsg-example.git)
 
 Installation
 ------------
