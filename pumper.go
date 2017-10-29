@@ -29,10 +29,15 @@ type PumperHandler interface {
 }
 
 type PumperStatis struct {
+	// message count
 	InTotal    int64
 	InProcess  int64
 	OutTotal   int64
 	OutProcess int64
+
+	// message bytes
+	BytesReaded  int64 // from rw
+	BytesWritten int64 // to rw
 }
 
 // Pumper represents a message pumper. It has a working loop
@@ -177,6 +182,7 @@ func (p *Pumper) readMsg() (MsgType, Msg) {
 	if err != nil {
 		panic(err)
 	}
+	atomic.AddInt64(&p.stat.BytesReaded, int64(len(m)))
 	return t, m
 }
 
@@ -211,6 +217,7 @@ func (p *Pumper) writeMsg(t MsgType, m Msg) {
 	if err != nil {
 		panic(err)
 	}
+	atomic.AddInt64(&p.stat.BytesWritten, int64(len(m)))
 }
 
 // Return non-nil if an error has happened.
@@ -298,6 +305,9 @@ func (p *Pumper) Statis() *PumperStatis {
 		InProcess:  atomic.LoadInt64(&p.stat.InProcess),
 		OutTotal:   atomic.LoadInt64(&p.stat.OutTotal),
 		OutProcess: atomic.LoadInt64(&p.stat.OutProcess),
+
+		BytesReaded:  atomic.LoadInt64(&p.stat.BytesReaded),
+		BytesWritten: atomic.LoadInt64(&p.stat.BytesWritten),
 	}
 }
 
