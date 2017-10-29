@@ -122,11 +122,27 @@ func (s *Server) Start() {
 func (s *Server) work(ctx context.Context) {
 	defer s.ending()
 
+	var tempDelay time.Duration // how long to sleep on accept failure
+
 	for q := false; !q; {
 		c, err := s.l.Accept()
 		if err != nil {
-			panic(err)
+			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+				if max := 1 * time.Second; tempDelay > max {
+					tempDelay = max
+				}
+			} else {
+				panic(err)
+			}
+		} else {
+			tempDelay = 0
 		}
+
 		if c != nil {
 			s.newClient(ctx, c)
 		}
@@ -134,7 +150,12 @@ func (s *Server) work(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			q = true
+			continue
 		default:
+		}
+
+		if tempDelay > 0 {
+			time.Sleep(tempDelay)
 		}
 	}
 }
