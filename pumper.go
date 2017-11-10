@@ -22,7 +22,7 @@ type msgEntry struct {
 	m Msg
 }
 
-// Objects implementing the PumperHandler interface can be registered
+// PumperHandler is the interface that can be registered
 // to process messages in the message pumper.
 type PumperHandler interface {
 	Process(ctx context.Context, p *Pumper, t MsgType, m Msg)
@@ -85,7 +85,7 @@ func (p *Pumper) init(rw MsgReadWriter, h PumperHandler, inN, outN int) {
 	p.wQ = make(chan msgEntry, outN)
 }
 
-// parent, sn can be nil.
+// Start the pumper, parent and/or sn can be nil.
 // If sn is not nil, it will be called when the working loop exits.
 func (p *Pumper) Start(parent context.Context, sn StopNotifier) {
 	if parent == nil {
@@ -220,7 +220,7 @@ func (p *Pumper) writeMsg(t MsgType, m Msg) {
 	atomic.AddInt64(&p.stat.BytesWritten, int64(len(m)))
 }
 
-// Return non-nil if an error has happened.
+// Err returns non-nil if an error has happened.
 // When errored, the pumper will stop.
 func (p *Pumper) Err() error {
 	if p.err != nil {
@@ -232,12 +232,12 @@ func (p *Pumper) Err() error {
 	return p.werr
 }
 
-// Request to stop the working loop.
+// Stop requests to stop the working loop.
 func (p *Pumper) Stop() {
 	p.quitF()
 }
 
-// Returns a done channel, it will be
+// StopD returns a done channel, it will be
 // signaled when the pumper is stopped.
 func (p *Pumper) StopD() syncx.DoneChanR {
 	return p.stopD.R()
@@ -247,7 +247,7 @@ func (p *Pumper) Stopped() bool {
 	return p.stopD.R().Done()
 }
 
-// Copy the message data to the in-queue.
+// Input copies the message data to the in-queue.
 func (p *Pumper) Input(t MsgType, m Msg) {
 	cp := bufpool.Get(len(m))
 	copy(cp, m)
@@ -259,7 +259,7 @@ func (p *Pumper) Input(t MsgType, m Msg) {
 	}
 }
 
-// Try copy the message data to the in-queue.
+// TryInput tries to copy the message data to the in-queue.
 func (p *Pumper) TryInput(t MsgType, m Msg) bool {
 	cp := bufpool.Get(len(m))
 	copy(cp, m)
@@ -273,7 +273,7 @@ func (p *Pumper) TryInput(t MsgType, m Msg) bool {
 	}
 }
 
-// Copy the message data to the out-queue.
+// Output copies the message data to the out-queue.
 func (p *Pumper) Output(t MsgType, m Msg) {
 	cp := bufpool.Get(len(m))
 	copy(cp, m)
@@ -285,7 +285,7 @@ func (p *Pumper) Output(t MsgType, m Msg) {
 	}
 }
 
-// Try copy the message data to the out-queue.
+// TryOutput tries to copy the message data to the out-queue.
 func (p *Pumper) TryOutput(t MsgType, m Msg) bool {
 	cp := bufpool.Get(len(m))
 	copy(cp, m)
@@ -311,7 +311,7 @@ func (p *Pumper) Statis() *PumperStatis {
 	}
 }
 
-// Return the data user setted.
+// UserData returns the data user setted.
 func (p *Pumper) UserData() interface{} {
 	return p.ud
 }
@@ -320,7 +320,7 @@ func (p *Pumper) SetUserData(ud interface{}) {
 	p.ud = ud
 }
 
-// Return the inner message readwriter.
+// InnerMsgRW returns the inner message readwriter.
 // You should make sure that its implements support concurrently
 // access if you want to call its methods.
 func (p *Pumper) InnerMsgRW() MsgReadWriter {

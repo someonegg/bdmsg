@@ -40,6 +40,7 @@ type MsgReadWriter interface {
 }
 
 /*
+MsgRWIO implementes the MsgReadWriter interface.
 In the transport layer, message's layout is:
 
 	A(length) + B(type) + C(data)
@@ -146,7 +147,7 @@ type StopNotifier interface {
 	OnStop()
 }
 
-// The default maximum message length is 128K.
+// DefaultMaxMsg is the default maximum message length.
 const DefaultMaxMsg = 128 * 1024
 
 type DefaultConverter struct {
@@ -158,10 +159,11 @@ func (c *DefaultConverter) Convert(rw io.ReadWriter) MsgReadWriter {
 		bufio.NewReader(rw), bufio.NewWriter(rw)), c.MsgMax)
 }
 
-// The default io.ReadWriter to MsgReadWriter converter.
+// DefaultIOC is the default io.ReadWriter to MsgReadWriter converter.
 var DefaultIOC = Converter(&DefaultConverter{MsgMax: DefaultMaxMsg})
 
 /*
+MsgRWDump provides message dump function.
 The dump format is:
 
 	R|W\nMessageType\nMessageSize\nMessageData\n\n
@@ -211,7 +213,6 @@ func (rw *MsgRWDump) needDump(t MsgType, m Msg) bool {
 	return true
 }
 
-// Not support concurrently access.
 func (rw *MsgRWDump) ReadMsg() (t MsgType, m Msg, err error) {
 	t, m, err = rw.rw.ReadMsg()
 	if err != nil {
@@ -237,7 +238,6 @@ func (rw *MsgRWDump) ReadMsg() (t MsgType, m Msg, err error) {
 	return
 }
 
-// Not support concurrently access.
 func (rw *MsgRWDump) WriteMsg(t MsgType, m Msg) (err error) {
 	err = rw.rw.WriteMsg(t, m)
 	if err != nil {

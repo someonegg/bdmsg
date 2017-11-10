@@ -55,7 +55,7 @@ func (c *SClient) OnStop() {
 	}
 }
 
-// The pumper's initial userdata is *SClient.
+// InnerPumper is c.Pumper, its initial userdata is *SClient.
 func (c *SClient) InnerPumper() *Pumper {
 	return &c.Pumper
 }
@@ -64,7 +64,7 @@ func (c *SClient) Conn() net.Conn {
 	return c.c
 }
 
-// Tell bdmsg that client is authorized.
+// Handshake tell bdmsg that client is authorized.
 // Unauthorized client will be closed after HSTO.
 func (c *SClient) Handshake() {
 	atomic.StoreInt32(&c.handshaked, 1)
@@ -94,7 +94,7 @@ type Server struct {
 	cliWG sync.WaitGroup
 }
 
-// NewServer allocates and returns a new Server.
+// NewServerF allocates and returns a new Server.
 //
 // Note: hsto is "handshake timeout".
 func NewServerF(l net.Listener, ioc Converter, hsto time.Duration,
@@ -194,19 +194,19 @@ func monitorHSTO(c *SClient, hsto time.Duration) {
 	}
 }
 
-// Return non-nil if an error has happened.
+// Err returns non-nil if an error has happened.
 // When errored, the server will stop.
 func (s *Server) Err() error {
 	return s.err
 }
 
-// Request to stop the server.
+// Stop requests to stop the server.
 func (s *Server) Stop() {
 	s.quitF()
 	s.l.Close()
 }
 
-// Returns a done channel, it will be
+// StopD returns a done channel, it will be
 // signaled when the server is stopped.
 func (s *Server) StopD() syncx.DoneChanR {
 	return s.stopD.R()

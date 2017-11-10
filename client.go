@@ -43,7 +43,7 @@ func (c *Client) OnStop() {
 	}
 }
 
-// The pumper's initial userdata is *Client.
+// InnerPumper is c.Pumper, its initial userdata is *Client.
 func (c *Client) InnerPumper() *Pumper {
 	return &c.Pumper
 }
