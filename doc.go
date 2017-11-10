@@ -63,6 +63,7 @@
 //
 //      s.Server = bdmsg.NewServerF(l, bdmsg.DefaultIOC, handshakeTO,
 //          mux, pumperInN, pumperOutN)
+//      s.Server.Start()
 //      return s
 //  }
 //
@@ -91,12 +92,12 @@
 // Client
 //  type client struct {
 //      *bdmsg.Client
-//      connected bool
+//      connected chan bool
 //  }
 //
 //  func newClient(conn net.Conn, pumperInN, pumperOutN int) *client {
 //
-//      c := &client{}
+//      c := &client{connected: make(chan bool)}
 //
 //      mux := bdmsg.NewPumpMux(nil)
 //      mux.HandleFunc(MsgTypeConnectReply, c.handleConnectReply)
@@ -123,6 +124,6 @@
 //
 //      // process connect reply
 //
-//      c.connected = true
+//      close(c.connected)
 //  }
 package bdmsg

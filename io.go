@@ -5,6 +5,7 @@
 package bdmsg
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -48,11 +49,17 @@ In the transport layer, message's layout is:
 */
 type MsgRWIO struct {
 	RW     io.ReadWriter
+	F      Flusher
 	MsgMax int
 }
 
+type Flusher interface {
+	Flush() error
+}
+
 func NewMsgRWIO(rw io.ReadWriter, msgMax int) *MsgRWIO {
-	return &MsgRWIO{RW: rw, MsgMax: msgMax}
+	f, _ := rw.(Flusher)
+	return &MsgRWIO{RW: rw, F: f, MsgMax: msgMax}
 }
 
 func (rw *MsgRWIO) ReadMsg() (t MsgType, m Msg, err error) {
@@ -125,6 +132,9 @@ func (rw *MsgRWIO) WriteMsg(t MsgType, m Msg) (err error) {
 		return
 	}
 
+	if rw.F != nil {
+		return rw.F.Flush()
+	}
 	return nil
 }
 
@@ -144,7 +154,8 @@ type DefaultConverter struct {
 }
 
 func (c *DefaultConverter) Convert(rw io.ReadWriter) MsgReadWriter {
-	return NewMsgRWIO(rw, c.MsgMax)
+	return NewMsgRWIO(bufio.NewReadWriter(
+		bufio.NewReader(rw), bufio.NewWriter(rw)), c.MsgMax)
 }
 
 // The default io.ReadWriter to MsgReadWriter converter.

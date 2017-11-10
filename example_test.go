@@ -10,6 +10,7 @@ import (
 	"github.com/someonegg/bdmsg"
 	"golang.org/x/net/context"
 	"net"
+	"testing"
 	"time"
 )
 
@@ -58,6 +59,7 @@ func newService(l net.Listener, handshakeTO time.Duration,
 
 	s.Server = bdmsg.NewServerF(l, bdmsg.DefaultIOC, handshakeTO,
 		mux, pumperInN, pumperOutN)
+	s.Server.Start()
 	return s
 }
 
@@ -86,12 +88,12 @@ func (s *server) handleConnect(ctx context.Context,
 
 type client struct {
 	*bdmsg.Client
-	connected bool
+	connected chan bool
 }
 
 func newClient(conn net.Conn, pumperInN, pumperOutN int) *client {
 
-	c := &client{}
+	c := &client{connected: make(chan bool)}
 
 	mux := bdmsg.NewPumpMux(nil)
 	mux.HandleFunc(MsgTypeConnectReply, c.handleConnectReply)
@@ -118,5 +120,41 @@ func (c *client) handleConnectReply(ctx context.Context,
 
 	// process connect reply
 
-	c.connected = true
+	close(c.connected)
+}
+
+func TestExample(t *testing.T) {
+	addr := "127.0.0.1:12345"
+
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal("listen failed: ", err)
+	}
+	svc := newService(l, time.Second, 10, 10)
+
+	c, err := net.Dial("tcp", "127.0.0.1:12345")
+	if err != nil {
+		t.Fatal("dial failed: ", err)
+	}
+	cli := newClient(c, 10, 10)
+
+	select {
+	case <-cli.connected:
+	case <-time.After(time.Second):
+		t.Fatal("client connect failed")
+	}
+
+	svc.Stop()
+
+	select {
+	case <-svc.StopD():
+	case <-time.After(time.Second):
+		t.Fatal("server stop failed")
+	}
+
+	select {
+	case <-cli.StopD():
+	case <-time.After(time.Second):
+		t.Fatal("client stop failed")
+	}
 }
