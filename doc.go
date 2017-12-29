@@ -3,6 +3,11 @@
 // license that can be found in the LICENSE file.
 
 // Package bdmsg implements bidirectional directly message protocol.
+//
+//  This package now has a better alternative which is more concise and customizable:
+//
+//  https://github.com/someonegg/msgpump.
+//
 // Message is defined as variable-length byte array, they are
 // distinguished by message-type, they can be freely transferred between
 // the server and the client.
