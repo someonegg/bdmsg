@@ -6,7 +6,7 @@
 //
 //  This package now has a better alternative which is more concise and customizable:
 //
-//  https://github.com/someonegg/msgpump.
+//  https://github.com/someonegg/msgpump
 //
 // Message is defined as variable-length byte array, they are
 // distinguished by message-type, they can be freely transferred between
